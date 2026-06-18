@@ -383,10 +383,33 @@ else
   W_DISP="${PCT_7D}%"
   W_COLOR="$C7_COLOR"
   PCT_7D_DISP="$PCT_7D"
+  if [[ "$CLAUDE_USE_AUTH" == "1" && "$AUTH_OK" != "1" ]]; then
+    W_DISP="${PCT_7D}%!"
+  fi
 fi
 echo "CC 5h:${PCT_5H}% W:${W_DISP} | color=$MENUBAR_COLOR length=24"
 echo "---"
 echo "Plan: ${DISPLAY_PLAN} | color=#bbbbbb"
+if [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
+  if [[ "$AUTH_OK" == "1" ]]; then
+    echo "Server: OK | color=#33dd33"
+  else
+    err_msg="${AUTH_LOAD_ERROR:-unknown}"
+    case "$err_msg" in
+      cache_missing)  msg="no cache yet (first run)" ;;
+      cache_stale)    msg="cache stale (>4min)" ;;
+      no_jq)          msg="jq missing" ;;
+      jq_failed)      msg="jq parse error" ;;
+      auth_ok_false)  msg="server returned error" ;;
+      not_logged_in)  msg="not logged in" ;;
+      page_load_timeout) msg="page load timeout" ;;
+      ws_error)       msg="Chrome CDP error" ;;
+      extract_regex_no_match) msg="page text mismatch" ;;
+      *)              msg="$err_msg" ;;
+    esac
+    echo "Server: FAIL (${msg}) | color=#ff8800"
+  fi
+fi
 is_real_reset() {
   local s="$1"
   [[ -z "$s" ]] && return 1
