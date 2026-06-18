@@ -18,16 +18,28 @@ if [[ -s "$CACHE" ]] && [[ $(($NOW - $(stat -f %m "$CACHE" 2>/dev/null || echo 0
   exit 0
 fi
 
+LOCK_OK=0
 if ! mkdir "$LOCK" 2>/dev/null; then
-  if [[ -s "$CACHE" ]]; then
-    cat "$CACHE"
-  else
-    echo "CC ... | color=#888888"
-    echo "---"
-    echo "Loading (first run, 5s) | color=#888888"
-    echo "Refresh | refresh=true"
+  LOCK_AGE=$(( NOW - $(stat -f %m "$LOCK" 2>/dev/null || echo 0) ))
+  if (( LOCK_AGE >= MAX_AGE )); then
+    rmdir "$LOCK" 2>/dev/null
+    if mkdir "$LOCK" 2>/dev/null; then
+      LOCK_OK=1
+    fi
   fi
-  exit 0
+  if [[ "$LOCK_OK" != "1" ]]; then
+    if [[ -s "$CACHE" ]]; then
+      cat "$CACHE"
+    else
+      echo "CC ... | color=#888888"
+      echo "---"
+      echo "Loading (first run, 5s) | color=#888888"
+      echo "Refresh | refresh=true"
+    fi
+    exit 0
+  fi
+else
+  LOCK_OK=1
 fi
 
 nohup "$REFRESH" >/dev/null 2>&1 &
