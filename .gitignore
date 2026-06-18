@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.bak
+*.OLD_*
+*.pyc
+.swiftbar_cache/
