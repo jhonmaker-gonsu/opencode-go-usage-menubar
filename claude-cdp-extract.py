@@ -21,14 +21,83 @@ def http_json(url, timeout=5):
 EXTRACT_JS = r"""
 (function() {
   function pct(label) {
-    var re = new RegExp(label + "[\\s\\S]{0,400}?(\\d{1,3})\\s*%", "i");
-    var m = document.body.innerText.match(re);
-    return m ? parseInt(m[1], 10) : null;
+    var text = document.body.innerText;
+    var idx = text.toLowerCase().indexOf(label.toLowerCase());
+    if (idx < 0) idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var window = text.substring(idx, Math.min(idx + 150, text.length));
+    var m = window.match(/(\d{1,3})\s*%/);
+    if (!m) return null;
+    var v = parseInt(m[1], 10);
+    if (v < 0 || v > 999) return null;
+    return v;
   }
   function resetFor(label) {
-    var re = new RegExp(label + "[\\s\\S]{0,700}?(?:resets in|後にリセット)\\s+([^\\n]+)", "i");
-    var m = document.body.innerText.match(re);
-    return m ? m[1].trim() : null;
+    var text = document.body.innerText;
+    var idx = text.toLowerCase().indexOf(label.toLowerCase());
+    if (idx < 0) idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 300, text.length));
+    var lines = after.split('\n');
+    for (var i = 0; i < Math.min(lines.length, 6); i++) {
+      var line = lines[i].trim();
+      if (line.endsWith('後にリセット')) {
+        var t = line.replace(/後にリセット$/, '').trim();
+        if (t && t.length <= 40 && !/\d\s*%/.test(t)) return t;
+      }
+      if (line.endsWith('にリセット')) {
+        var t = line.replace(/にリセット$/, '').trim();
+        if (t && t.length <= 40 && !/\d\s*%/.test(t)) return t;
+      }
+      if (/resets in\s.+$/i.test(line)) {
+        var t = line.replace(/^.*resets in\s+/i, '').trim();
+        if (t && t.length <= 40 && !/\d\s*%/.test(t)) return t;
+      }
+    }
+    return null;
+  }
+  function toDateStr(raw) {
+    if (!raw) return null;
+    var now = new Date();
+    var m;
+    m = raw.match(/^(\d+)時間(\d+)分$/);
+    if (m) {
+      var d = new Date(now.getTime() + (parseInt(m[1],10)*3600 + parseInt(m[2],10)*60)*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+)分$/);
+    if (m) {
+      var d = new Date(now.getTime() + parseInt(m[1],10)*60*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+)時間$/);
+    if (m) {
+      var d = new Date(now.getTime() + parseInt(m[1],10)*3600*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+):(\d+)\s*\(([日月火水木金土])\)$/);
+    if (m) {
+      var hh = parseInt(m[1],10), mm = parseInt(m[2],10);
+      var wdMap = {日:0,月:1,火:2,水:3,木:4,金:5,土:6};
+      var targetWd = wdMap[m[3]];
+      var d = new Date(now);
+      d.setHours(hh, mm, 0, 0);
+      var diff = (targetWd - d.getDay() + 7) % 7;
+      if (diff === 0 && d.getTime() <= now.getTime()) diff = 7;
+      d.setDate(d.getDate() + diff);
+      return d.toISOString();
+    }
+    m = raw.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d+)$/i);
+    if (m) {
+      var monMap = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      var mon = monMap[m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()];
+      var day = parseInt(m[2],10);
+      var yr = now.getFullYear();
+      var d = new Date(yr, mon, day, 0, 0, 0, 0);
+      if (d.getTime() < now.getTime()) d = new Date(yr+1, mon, day, 0, 0, 0, 0);
+      return d.toISOString();
+    }
+    return null;
   }
   function moneyUsed(re) {
     var m = document.body.innerText.match(re);
@@ -41,6 +110,51 @@ EXTRACT_JS = r"""
     if (!m) return null;
     var v = parseFloat(m[1].replace(/,/g, ""));
     return isNaN(v) ? null : v;
+  }
+  function moneyAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 100, text.length));
+    var m = after.match(/\$\s*([\d.,]+)/);
+    if (!m) return null;
+    var v = parseFloat(m[1].replace(/,/g, ""));
+    return isNaN(v) ? null : v;
+  }
+  function moneyInCredit(label, which) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var endIdx = text.indexOf("\u6708\u9593\u5229\u7528\u4e0a\u9650", idx);
+    if (endIdx < 0) endIdx = Math.min(idx + 500, text.length);
+    var section = text.substring(idx, endIdx);
+    var amounts = section.match(/\$\s*([\d.,]+)/g);
+    if (!amounts || amounts.length === 0) return null;
+    var pick = which === "last" ? amounts[amounts.length - 1] : amounts[0];
+    var m = pick.match(/([\d.,]+)/);
+    var v = parseFloat(m[1].replace(/,/g, ""));
+    return isNaN(v) ? null : v;
+  }
+  function pctAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 100, text.length));
+    var m = after.match(/(\d{1,3})\s*%/);
+    if (!m) return null;
+    return parseInt(m[1], 10);
+  }
+  function statusAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 50, text.length));
+    var lines = after.split('\n').map(function(s){return s.trim();}).filter(function(s){return s.length > 0;});
+    if (lines.length === 0) return null;
+    var first = lines[0];
+    if (/^(オフ|off)$/i.test(first)) return "off";
+    if (/^(オン|on)$/i.test(first)) return "on";
+    return null;
   }
   var text = document.body ? document.body.innerText : "";
   var planMatch = text.match(/Max\s*\(([^)]+)\)/);
@@ -58,13 +172,19 @@ EXTRACT_JS = r"""
     plan_tier: planTier,
     session_pct: pct("Current session") || pct("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3"),
     session_reset: resetFor("Current session") || resetFor("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3"),
+    session_reset_date: toDateStr(resetFor("Current session") || resetFor("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3")),
     weekly_all_pct: pct("All models") || pct("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb"),
     weekly_sonnet_pct: pct("Sonnet only") || pct("Sonnet\u306e\u307f"),
     weekly_reset: resetFor("All models") || resetFor("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb"),
+    weekly_reset_date: toDateStr(resetFor("All models") || resetFor("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb")),
     monthly_all_pct: pct("Monthly") || pct("\u6708\u9593"),
-    monthly_reset: resetFor("Monthly") || resetFor("\u6708\u9593"),
-    additional_used: moneyUsed(/\$\s*([\d.,]+)\s*(?:used|\u4f7f\u7528\u6d3e|\/)/i),
-    additional_cap: moneyCap(/\$\s*([\d.,]+)\s*(?:cap|limit|\u4e0a\u9650)/i),
+    monthly_reset: resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593"),
+    monthly_reset_date: toDateStr(resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593")),
+    additional_used: moneyUsed(/\$\s*([\d.,]+)\s*(?:used|\u4f7f\u7528)/i),
+    additional_cap: moneyInCredit("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8", "last"),
+    additional_pct: pctAfter("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8"),
+    monthly_limit: moneyAfter("\u6708\u9593\u5229\u7528\u4e0a\u9650"),
+    auto_charge: statusAfter("\u81ea\u52d5\u30c1\u30e3\u30fc\u30b8"),
     page_excerpt: text.substring(0, 600),
     url: location.href
   });
@@ -160,7 +280,7 @@ def navigate_and_extract(ws_url, target_url, timeout_s):
                 break
         if not loaded:
             return {"ok": False, "error": "page_load_timeout", "fetched_at": _now()}
-        time.sleep(1.5)
+        time.sleep(8.0)
         msg_id[0] += 1
         send_command(bws, "Runtime.evaluate", {
             "expression": EXTRACT_JS,
