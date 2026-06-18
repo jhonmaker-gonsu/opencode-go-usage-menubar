@@ -67,6 +67,9 @@ AUTH_RESET_MONTHLY=""
 AUTH_RESET_MONTHLY_DATE=""
 AUTH_ADD_USED=""
 AUTH_ADD_CAP=""
+AUTH_ADD_PCT=""
+AUTH_MONTHLY_LIMIT=""
+AUTH_AUTO_CHARGE=""
 AUTH_FETCHED_AT=""
 AUTH_LOAD_ERROR=""
 
@@ -97,13 +100,16 @@ if [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
           mo_date:   s(.monthly_reset_date),
           add_used:  s(.additional_used),
           add_cap:   s(.additional_cap),
+          add_pct:   s(.additional_pct),
+          mo_limit:  s(.monthly_limit),
+          auto_chg:  s(.auto_charge),
           fetched:   s(.fetched_at),
           err:       s(.error)
-        } | [.ok, .plan, .sess_pct, .sess_rst, .sess_date, .wk_all, .wk_son, .wk_rst, .wk_date, .mo_all, .mo_rst, .mo_date, .add_used, .add_cap, .fetched, .err] | @tsv
+        } | [.ok, .plan, .sess_pct, .sess_rst, .sess_date, .wk_all, .wk_son, .wk_rst, .wk_date, .mo_all, .mo_rst, .mo_date, .add_used, .add_cap, .add_pct, .mo_limit, .auto_chg, .fetched, .err] | @tsv
       ' < "$CLAUDE_AUTH_CACHE" 2>/dev/null) || AUTH_TSV=""
       if [[ -n "$AUTH_TSV" ]]; then
         AUTH_FIELDS=()
-        while IFS= read -r f; do AUTH_FIELDS+=("$f"); done < <(printf '%s\n' "$AUTH_TSV" | awk -F'\t' '{ for (i=1; i<=16; i++) print (i<=NF ? $i : "") }')
+        while IFS= read -r f; do AUTH_FIELDS+=("$f"); done < <(printf '%s\n' "$AUTH_TSV" | awk -F'\t' '{ for (i=1; i<=19; i++) print (i<=NF ? $i : "") }')
         AUTH_OK_RAW="${AUTH_FIELDS[0]:-}"
         AUTH_PLAN="${AUTH_FIELDS[1]:-}"
         AUTH_SESSION_PCT="${AUTH_FIELDS[2]:-}"
@@ -118,8 +124,11 @@ if [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
         AUTH_RESET_MONTHLY_DATE="${AUTH_FIELDS[11]:-}"
         AUTH_ADD_USED="${AUTH_FIELDS[12]:-}"
         AUTH_ADD_CAP="${AUTH_FIELDS[13]:-}"
-        AUTH_FETCHED_AT="${AUTH_FIELDS[14]:-}"
-        AUTH_LOAD_ERROR="${AUTH_FIELDS[15]:-}"
+        AUTH_ADD_PCT="${AUTH_FIELDS[14]:-}"
+        AUTH_MONTHLY_LIMIT="${AUTH_FIELDS[15]:-}"
+        AUTH_AUTO_CHARGE="${AUTH_FIELDS[16]:-}"
+        AUTH_FETCHED_AT="${AUTH_FIELDS[17]:-}"
+        AUTH_LOAD_ERROR="${AUTH_FIELDS[18]:-}"
         if [[ "$AUTH_OK_RAW" == "true" ]]; then
           AUTH_OK="1"
           AUTH_LOAD_ERROR=""
@@ -456,6 +465,30 @@ else
     echo "Session: ~${ACTIVE_MSG} msgs (approx) | color=#bbbbbb"
   else
     echo "Session: no recent activity | color=#bbbbbb"
+  fi
+fi
+if [[ "$AUTH_OK" == "1" ]]; then
+  echo "---"
+  if [[ -n "$AUTH_ADD_USED" && -n "$AUTH_ADD_CAP" && "$AUTH_ADD_USED" != "null" && "$AUTH_ADD_CAP" != "null" ]]; then
+    ADD_PCT="${AUTH_ADD_PCT:-0}"
+    [[ "$ADD_PCT" == "null" || -z "$ADD_PCT" ]] && ADD_PCT="0"
+    ADD_COLOR=$(color_for "$ADD_PCT")
+    printf "Credits: \$%.2f / \$%.2f (%d%%) | color=%s\n" "$AUTH_ADD_USED" "$AUTH_ADD_CAP" "$ADD_PCT" "$ADD_COLOR"
+    if MD=$(fmt_date "$AUTH_RESET_MONTHLY_DATE"); then
+      echo "  ↳ resets $MD JST | color=#66aaff"
+    elif is_real_reset "$AUTH_RESET_MONTHLY"; then
+      echo "  ↳ resets in ${AUTH_RESET_MONTHLY} | color=#66aaff"
+    fi
+  fi
+  if [[ -n "$AUTH_MONTHLY_LIMIT" && "$AUTH_MONTHLY_LIMIT" != "null" ]]; then
+    printf "Monthly limit: \$%.2f | color=#bbbbbb\n" "$AUTH_MONTHLY_LIMIT"
+  fi
+  if [[ -n "$AUTH_AUTO_CHARGE" && "$AUTH_AUTO_CHARGE" != "null" ]]; then
+    if [[ "$AUTH_AUTO_CHARGE" == "off" ]]; then
+      echo "Auto-charge: OFF | color=#ff8800"
+    else
+      echo "Auto-charge: ON | color=#33dd33"
+    fi
   fi
 fi
 echo "---"

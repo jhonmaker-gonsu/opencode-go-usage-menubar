@@ -111,6 +111,51 @@ EXTRACT_JS = r"""
     var v = parseFloat(m[1].replace(/,/g, ""));
     return isNaN(v) ? null : v;
   }
+  function moneyAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 100, text.length));
+    var m = after.match(/\$\s*([\d.,]+)/);
+    if (!m) return null;
+    var v = parseFloat(m[1].replace(/,/g, ""));
+    return isNaN(v) ? null : v;
+  }
+  function moneyInCredit(label, which) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var endIdx = text.indexOf("\u6708\u9593\u5229\u7528\u4e0a\u9650", idx);
+    if (endIdx < 0) endIdx = Math.min(idx + 500, text.length);
+    var section = text.substring(idx, endIdx);
+    var amounts = section.match(/\$\s*([\d.,]+)/g);
+    if (!amounts || amounts.length === 0) return null;
+    var pick = which === "last" ? amounts[amounts.length - 1] : amounts[0];
+    var m = pick.match(/([\d.,]+)/);
+    var v = parseFloat(m[1].replace(/,/g, ""));
+    return isNaN(v) ? null : v;
+  }
+  function pctAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 100, text.length));
+    var m = after.match(/(\d{1,3})\s*%/);
+    if (!m) return null;
+    return parseInt(m[1], 10);
+  }
+  function statusAfter(label) {
+    var text = document.body.innerText;
+    var idx = text.indexOf(label);
+    if (idx < 0) return null;
+    var after = text.substring(idx + label.length, Math.min(idx + label.length + 50, text.length));
+    var lines = after.split('\n').map(function(s){return s.trim();}).filter(function(s){return s.length > 0;});
+    if (lines.length === 0) return null;
+    var first = lines[0];
+    if (/^(オフ|off)$/i.test(first)) return "off";
+    if (/^(オン|on)$/i.test(first)) return "on";
+    return null;
+  }
   var text = document.body ? document.body.innerText : "";
   var planMatch = text.match(/Max\s*\(([^)]+)\)/);
   var planTier = null;
@@ -135,8 +180,11 @@ EXTRACT_JS = r"""
     monthly_all_pct: pct("Monthly") || pct("\u6708\u9593"),
     monthly_reset: resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593"),
     monthly_reset_date: toDateStr(resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593")),
-    additional_used: moneyUsed(/\$\s*([\d.,]+)\s*(?:used|\u4f7f\u7528\u6d3e|\/)/i),
-    additional_cap: moneyCap(/\$\s*([\d.,]+)\s*(?:cap|limit|\u4e0a\u9650)/i),
+    additional_used: moneyUsed(/\$\s*([\d.,]+)\s*(?:used|\u4f7f\u7528)/i),
+    additional_cap: moneyInCredit("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8", "last"),
+    additional_pct: pctAfter("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8"),
+    monthly_limit: moneyAfter("\u6708\u9593\u5229\u7528\u4e0a\u9650"),
+    auto_charge: statusAfter("\u81ea\u52d5\u30c1\u30e3\u30fc\u30b8"),
     page_excerpt: text.substring(0, 600),
     url: location.href
   });
