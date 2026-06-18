@@ -12,17 +12,19 @@ NUMFMT="${NUMFMT:-/opt/homebrew/bin/numfmt}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 CLAUDE_PLAN="${CLAUDE_PLAN:-max5x}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-}"
-CAP_7D_OVERRIDE="${CAP_7D_OVERRIDE:-}"
-CAP_30D_OVERRIDE="${CAP_30D_OVERRIDE:-}"
+CAP_5H_OVERRIDE="${CAP_5H_OVERRIDE:-}"
 CLAUDE_PROJECT="${CLAUDE_PROJECT:-}"
 CLAUDE_MTIME_DAYS="${CLAUDE_MTIME_DAYS:-365}"
 
 case "$CLAUDE_PLAN" in
-  pro)    CAP_5H=45  ;;
-  max5x)  CAP_5H=225 ;;
-  max20x) CAP_5H=900 ;;
-  *)      CAP_5H=45  ;;
+  pro)    CAP_5H=45   CAP_7D=1800  CAP_30D=7200  ;;
+  max5x)  CAP_5H=225  CAP_7D=9000  CAP_30D=36000 ;;
+  max20x) CAP_5H=900  CAP_7D=36000 CAP_30D=144000;;
+  *)      CAP_5H=45   CAP_7D=1800  CAP_30D=7200  ;;
 esac
+CAP_5H="${CAP_5H_OVERRIDE:-$CAP_5H}"
+CAP_7D="${CAP_7D_OVERRIDE:-$CAP_7D}"
+CAP_30D="${CAP_30D_OVERRIDE:-$CAP_30D}"
 
 NOW_HMS=$(date +%H:%M:%S)
 C5_CUTOFF=$(TZ=UTC date -u -v-5H  +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || TZ=UTC date -u -d '5 hours ago'  +%Y-%m-%dT%H:%M:%SZ)
@@ -197,9 +199,6 @@ fi
 
 PCT_5H=$(pct_of "$C5" "$CAP_5H")
 C5_COLOR=$(color_for "$PCT_5H")
-
-CAP_7D=${CAP_7D_OVERRIDE:-$(( CAP_5H * 40 ))}
-CAP_30D=${CAP_30D_OVERRIDE:-$(( CAP_5H * 160 ))}
 PCT_7D=$(pct_of "$C7" "$CAP_7D")
 PCT_30D=$(pct_of "$C30" "$CAP_30D")
 C7_COLOR=$(color_for "$PCT_7D")
@@ -235,7 +234,7 @@ if [[ -n "$CLAUDE_MODEL" ]]; then
 fi
 echo "Weekly (all): ${C7} msg / ${CAP_7D} cap (${PCT_7D}%) | color=$C7_COLOR"
 echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
-echo "(caps estimated; override with CAP_7D_OVERRIDE/CAP_30D_OVERRIDE) | color=#888888"
+echo "(caps: pro 45/1800/7200, max5x 225/9000/36000, max20x 900/36000/144000) | color=#888888"
 if [[ -z "$CLAUDE_MODEL" ]]; then
   echo "Set CLAUDE_MODEL=claude-opus-* for per-model breakdown (glob) | color=#888888"
 fi
