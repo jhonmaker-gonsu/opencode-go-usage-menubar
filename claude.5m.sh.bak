@@ -10,7 +10,10 @@ set -euo pipefail
 JQ="${JQ:-/opt/homebrew/bin/jq}"
 NUMFMT="${NUMFMT:-/opt/homebrew/bin/numfmt}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
-CLAUDE_PLAN="${CLAUDE_PLAN:-pro}"
+CLAUDE_PLAN="${CLAUDE_PLAN:-max5x}"
+CLAUDE_MODEL="${CLAUDE_MODEL:-}"
+CAP_7D_OVERRIDE="${CAP_7D_OVERRIDE:-}"
+CAP_30D_OVERRIDE="${CAP_30D_OVERRIDE:-}"
 CLAUDE_PROJECT="${CLAUDE_PROJECT:-}"
 CLAUDE_MTIME_DAYS="${CLAUDE_MTIME_DAYS:-365}"
 
@@ -97,9 +100,9 @@ if [[ ${#JSONL_FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-INNER='select(.type == "assistant") | {ts: (.timestamp // ""), in: (.message.usage.input_tokens // 0), out: (.message.usage.output_tokens // 0), cc: (.message.usage.cache_creation_input_tokens // 0), cr: (.message.usage.cache_read_input_tokens // 0)}'
+INNER='select(.type == "assistant") | {ts: (.timestamp // ""), in: (.message.usage.input_tokens // 0), out: (.message.usage.output_tokens // 0), cc: (.message.usage.cache_creation_input_tokens // 0), cr: (.message.usage.cache_read_input_tokens // 0), m: (.message.model // "")}'
 
-OUTER='. as $o | ($o.ts // "") as $t | ($o.in // 0) as $i | ($o.out // 0) as $ot | ($o.cc // 0) as $cc | ($o.cr // 0) as $cr | (["T", $t, $i, $ot, $cc, $cr]), (if (($t | type) == "string") and ($t >= $c5)  then ["5",  $t, $i, $ot, $cc, $cr] else empty end), (if (($t | type) == "string") and ($t >= $c7)  then ["7",  $t, $i, $ot, $cc, $cr] else empty end), (if (($t | type) == "string") and ($t >= $c30) then ["30", $t, $i, $ot, $cc, $cr] else empty end) | @tsv'
+OUTER='. as $o | ($o.ts // "") as $t | ($o.in // 0) as $i | ($o.out // 0) as $ot | ($o.cc // 0) as $cc | ($o.cr // 0) as $cr | ($o.m // "") as $m | (["T", $t, $i, $ot, $cc, $cr, $m]), (if (($t | type) == "string") and ($t >= $c5)  then ["5",  $t, $i, $ot, $cc, $cr, $m] else empty end), (if (($t | type) == "string") and ($t >= $c7)  then ["7",  $t, $i, $ot, $cc, $cr, $m] else empty end), (if (($t | type) == "string") and ($t >= $c30) then ["30", $t, $i, $ot, $cc, $cr, $m] else empty end) | @tsv'
 
 TSV=$(
   for f in "${JSONL_FILES[@]}"; do
@@ -138,6 +141,22 @@ SUMMARY=$(echo "$TSV" | awk -F'\t' '
       is[30]+0, os[30]+0, ccs[30]+0, crs[30]+0
   }
 ')
+
+if [[ -n "$CLAUDE_MODEL" ]]; then
+  MODEL_PATTERN="${CLAUDE_MODEL//\*/.*}"
+  MODEL_5H=$(echo "$TSV" | awk -F'\t' -v p="$MODEL_PATTERN" '
+    $1 == "5" && $7 ~ p { c++ }
+    END { print c+0 }
+  ')
+  MODEL_7D=$(echo "$TSV" | awk -F'\t' -v p="$MODEL_PATTERN" '
+    $1 == "7" && $7 ~ p { c++ }
+    END { print c+0 }
+  ')
+  MODEL_30D=$(echo "$TSV" | awk -F'\t' -v p="$MODEL_PATTERN" '
+    $1 == "30" && $7 ~ p { c++ }
+    END { print c+0 }
+  ')
+fi
 
 if [[ -z "$SUMMARY" ]]; then
   echo "CC ?"
@@ -179,25 +198,47 @@ fi
 PCT_5H=$(pct_of "$C5" "$CAP_5H")
 C5_COLOR=$(color_for "$PCT_5H")
 
-CAP_7D=$(( CAP_5H * 168 / 5 ))
-CAP_30D=$(( CAP_5H * 720 / 5 ))
+CAP_7D=${CAP_7D_OVERRIDE:-$(( CAP_5H * 40 ))}
+CAP_30D=${CAP_30D_OVERRIDE:-$(( CAP_5H * 160 ))}
 PCT_7D=$(pct_of "$C7" "$CAP_7D")
 PCT_30D=$(pct_of "$C30" "$CAP_30D")
 C7_COLOR=$(color_for "$PCT_7D")
 C30_COLOR=$(color_for "$PCT_30D")
 
-if [[ "$C5" -eq 0 ]]; then
-  echo "CC 0 | color=#33dd33"
+if [[ -n "$CLAUDE_MODEL" ]]; then
+  PCT_M5=$(pct_of "$MODEL_5H" "$CAP_5H")
+  PCT_M7=$(pct_of "$MODEL_7D" "$CAP_7D")
+  PCT_M30=$(pct_of "$MODEL_30D" "$CAP_30D")
+  C5_COLOR=$(color_for "$PCT_M5")
+  if [[ "$MODEL_5H" -eq 0 ]]; then
+    echo "CC 0 | color=#33dd33"
+  else
+    echo "CC ${MODEL_5H}/${CAP_5H} ${PCT_M5}% | color=$C5_COLOR"
+  fi
 else
-  echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR"
+  if [[ "$C5" -eq 0 ]]; then
+    echo "CC 0 | color=#33dd33"
+  else
+    echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR"
+  fi
 fi
 echo "---"
 echo "Plan: ${CLAUDE_PLAN} (5h cap: ${CAP_5H}) | color=#888888"
 echo "5h rolling:    ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
 echo "    resets: server-side, no client signal | color=#888888"
-echo "Weekly:        ${C7} msg / ${CAP_7D} cap (${PCT_7D}%, extrapolated) | color=$C7_COLOR"
-echo "Monthly:       ${C30} msg / ${CAP_30D} cap (${PCT_30D}%, extrapolated) | color=$C30_COLOR"
-echo "(caps extrapolated from 5h rate; not published by Anthropic) | color=#888888"
+if [[ -n "$CLAUDE_MODEL" ]]; then
+  C7_M_COLOR=$(color_for "$PCT_M7")
+  C30_M_COLOR=$(color_for "$PCT_M30")
+  echo "5h ${CLAUDE_MODEL}: ${MODEL_5H} / ${CAP_5H} (${PCT_M5}%) | color=$C5_COLOR"
+  echo "Weekly ${CLAUDE_MODEL}: ${MODEL_7D} / ${CAP_7D} (${PCT_M7}%) | color=$C7_M_COLOR"
+  echo "Monthly ${CLAUDE_MODEL}: ${MODEL_30D} / ${CAP_30D} (${PCT_M30}%) | color=$C30_M_COLOR"
+fi
+echo "Weekly (all): ${C7} msg / ${CAP_7D} cap (${PCT_7D}%) | color=$C7_COLOR"
+echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
+echo "(caps estimated; override with CAP_7D_OVERRIDE/CAP_30D_OVERRIDE) | color=#888888"
+if [[ -z "$CLAUDE_MODEL" ]]; then
+  echo "Set CLAUDE_MODEL=claude-opus-* for per-model breakdown (glob) | color=#888888"
+fi
 echo "---"
 T5_TOTAL=$(awk -v a="$T5_IN" -v b="$T5_OUT" -v c="$T5_CC" -v d="$T5_CR" 'BEGIN{print a+b+c+d}')
 echo "Tokens 5h in:    $(echo "$T5_IN" | "$NUMFMT" --to=si --format="%.1f") | color=#888888"
