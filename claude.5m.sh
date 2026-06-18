@@ -9,7 +9,7 @@ CACHE_DIR="${TMPDIR:-/tmp}"
 CACHE="${CACHE_DIR}/claude-menubar-cache"
 LOCK="${CACHE_DIR}/claude-menubar-cache.lockdir"
 SCRIPT=/Users/gon/SwiftBar/claude.5m.sh.bak
-PLAN="${CLAUDE_PLAN:-pro}"
+PLAN="${CLAUDE_PLAN:-max5x}"
 PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 
 NOW=$(date +%s)
