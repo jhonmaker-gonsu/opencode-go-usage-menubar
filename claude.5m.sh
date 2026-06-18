@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <xbar.title>Claude Code Usage</xbar.title>
-# <xbar.version>1.0.0</xbar.version>
+# <xbar.version>1.0.1</xbar.version>
 # <xbar.author>gon</xbar.author>
 # <xbar.desc>Claude Code message quota (5h + 7d + 30d) from local JSONL</xbar.desc>
 # <xbar.dependencies>jq,numfmt</xbar.dependencies>
@@ -12,6 +12,7 @@ NUMFMT="${NUMFMT:-/opt/homebrew/bin/numfmt}"
 CLAUDE_PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 CLAUDE_PLAN="${CLAUDE_PLAN:-pro}"
 CLAUDE_PROJECT="${CLAUDE_PROJECT:-}"
+CLAUDE_MTIME_DAYS="${CLAUDE_MTIME_DAYS:-365}"
 
 case "$CLAUDE_PLAN" in
   pro)    CAP_5H=45  ;;
@@ -57,11 +58,21 @@ if [[ ! -x "$JQ" ]]; then
   exit 0
 fi
 
+if [[ ! -x "$NUMFMT" ]]; then
+  echo "CC ?"
+  echo "---"
+  echo "numfmt not found at $NUMFMT | color=#ff3333"
+  echo "Install: brew install coreutils | color=#888888"
+  echo "Last refresh: $NOW_HMS | color=#888888"
+  echo "Refresh | refresh=true"
+  exit 0
+fi
+
 mapfile -d '' JSONL_FILES < <(
   find "$CLAUDE_PROJECTS" \
     -name "*.jsonl" \
     -not -path "*/subagents/*" \
-    -mtime -31 \
+    -mtime "-${CLAUDE_MTIME_DAYS}" \
     ${CLAUDE_PROJECT:+-path "*/$CLAUDE_PROJECT/*"} \
     -print0 2>/dev/null
 )
@@ -79,7 +90,7 @@ fi
 if [[ ${#JSONL_FILES[@]} -eq 0 ]]; then
   echo "CC 0"
   echo "---"
-  echo "No JSONL sessions found in last 30d | color=#888888"
+  echo "No JSONL sessions found in last ${CLAUDE_MTIME_DAYS}d | color=#888888"
   echo "Set CLAUDE_PROJECT for per-project view | color=#888888"
   echo "Last refresh: $NOW_HMS | color=#888888"
   echo "Refresh | refresh=true"
@@ -92,7 +103,7 @@ OUTER='. as $o | ($o.ts // "") as $t | ($o.in // 0) as $i | ($o.out // 0) as $ot
 
 TSV=$(
   for f in "${JSONL_FILES[@]}"; do
-    "$JQ" -c "$INNER" < "$f" 2>/dev/null || true
+    grep '^{' "$f" 2>/dev/null | "$JQ" -c "$INNER" 2>/dev/null || true
   done \
     | "$JQ" -r --arg c5 "$C5_CUTOFF" --arg c7 "$C7_CUTOFF" --arg c30 "$C30_CUTOFF" "$OUTER"
 ) || TSV=""
@@ -101,7 +112,7 @@ if [[ -z "$TSV" ]]; then
   echo "CC ?"
   echo "---"
   echo "jq pipeline produced no rows | color=#ff3333"
-  echo "Possible causes: schema drift, all JSONL corrupt | color=#888888"
+  echo "Possible causes: schema drift, type-field rename (assistant -> assistant_v2), or all JSONL corrupt | color=#888888"
   echo "Last refresh: $NOW_HMS | color=#888888"
   echo "Refresh | refresh=true"
   exit 0
@@ -169,9 +180,9 @@ PCT_5H=$(pct_of "$C5" "$CAP_5H")
 C5_COLOR=$(color_for "$PCT_5H")
 
 if [[ "$C5" -eq 0 ]]; then
-  echo "CC 0 | length=14 color=#33dd33 tooltip=No Claude usage in last 5h"
+  echo "CC 0 | color=#33dd33 tooltip=No Claude usage in last 5h"
 else
-  echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | length=14 color=$C5_COLOR tooltip=Claude ${CLAUDE_PLAN}: ${C5} of ${CAP_5H} messages in last 5h"
+  echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR tooltip=Claude ${CLAUDE_PLAN}: ${C5} of ${CAP_5H} messages in last 5h"
 fi
 echo "---"
 echo "Plan: ${CLAUDE_PLAN} (5h cap: ${CAP_5H}) | color=#888888"
