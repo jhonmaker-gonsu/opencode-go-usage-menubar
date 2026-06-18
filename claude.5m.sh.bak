@@ -209,17 +209,9 @@ if [[ -n "$CLAUDE_MODEL" ]]; then
   PCT_M7=$(pct_of "$MODEL_7D" "$CAP_7D")
   PCT_M30=$(pct_of "$MODEL_30D" "$CAP_30D")
   C5_COLOR=$(color_for "$PCT_M5")
-  if [[ "$MODEL_5H" -eq 0 ]]; then
-    echo "CC 0 | color=#33dd33"
-  else
-    echo "CC ${MODEL_5H}/${CAP_5H} ${PCT_M5}% | color=$C5_COLOR"
-  fi
+  echo "CC ${MODEL_5H}/${CAP_5H} ${PCT_M5}% | color=$C5_COLOR"
 else
-  if [[ "$C5" -eq 0 ]]; then
-    echo "CC 0 | color=#33dd33"
-  else
-    echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR"
-  fi
+  echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR"
 fi
 echo "---"
 echo "Plan: ${CLAUDE_PLAN} (5h cap: ${CAP_5H}) | color=#888888"
