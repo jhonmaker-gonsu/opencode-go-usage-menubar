@@ -32,8 +32,8 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   exit 0
 fi
 
-if [[ "${CLAUDE_USE_AUTH:-0}" == "1" ]]; then
-  ( "$HOME/SwiftBar/claude-cdp-scraper.sh" >/dev/null 2>&1 ) &
+if [[ "${CLAUDE_USE_AUTH:-1}" == "1" ]]; then
+  ( "$HOME/.claude-swiftbar-chrome/claude-cdp-scraper.sh" >/dev/null 2>&1 ) &
 fi
 
 ( CLAUDE_PLAN="$PLAN" CLAUDE_PROJECTS="$PROJECTS" \
