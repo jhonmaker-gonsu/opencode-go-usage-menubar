@@ -368,7 +368,7 @@ else
   W_COLOR="$C7_COLOR"
   PCT_7D_DISP="$PCT_7D"
 fi
-echo "CC 5h:${PCT_5H}% W:${W_DISP} M:${PCT_30D}% | color=$MENUBAR_COLOR length=24"
+echo "CC 5h:${PCT_5H}% W:${W_DISP} | color=$MENUBAR_COLOR length=24"
 echo "---"
 echo "Plan: ${DISPLAY_PLAN} | color=#888888"
 echo "5h rolling (all): ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
@@ -408,19 +408,23 @@ if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_WEEKLY" ]]; then
 else
   echo "   resets: see claude.ai (server) | color=#888888"
 fi
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_MONTHLY_ALL_PCT" ]] && [[ "$AUTH_MONTHLY_ALL_PCT" =~ ^[0-9]+$ ]]; then
-  MO_COLOR=$(color_for "$AUTH_MONTHLY_ALL_PCT")
-  echo "Monthly (all): server ${AUTH_MONTHLY_ALL_PCT}%* (local ${C30}/${CAP_30D} = ${PCT_30D}%) | color=$MO_COLOR"
-else
-  echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
-fi
-PCT=$(pct_of "$FAM30_OPUS" "$CAP_30D")
-COL=$(color_for "$PCT")
-echo "   Opus: ${FAM30_OPUS} msg (${PCT}% of ${CAP_30D}) | color=$COL"
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_MONTHLY" ]]; then
-  echo "   resets: ${AUTH_RESET_MONTHLY} (server) | color=#888888"
-else
-  echo "   resets: see claude.ai (server) | color=#888888"
+# Claude console has no monthly cap; remove the entire monthly section
+# (kept FAM30_OPUS variable for backward compat, but never display it)
+if false; then
+  if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_MONTHLY_ALL_PCT" ]] && [[ "$AUTH_MONTHLY_ALL_PCT" =~ ^[0-9]+$ ]]; then
+    MO_COLOR=$(color_for "$AUTH_MONTHLY_ALL_PCT")
+    echo "Monthly (all): server ${AUTH_MONTHLY_ALL_PCT}%* (local ${C30}/${CAP_30D} = ${PCT_30D}%) | color=$MO_COLOR"
+  else
+    echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
+  fi
+  PCT=$(pct_of "$FAM30_OPUS" "$CAP_30D")
+  COL=$(color_for "$PCT")
+  echo "   Opus: ${FAM30_OPUS} msg (${PCT}% of ${CAP_30D}) | color=$COL"
+  if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_MONTHLY" ]]; then
+    echo "   resets: ${AUTH_RESET_MONTHLY} (server) | color=#888888"
+  else
+    echo "   resets: see claude.ai (server) | color=#888888"
+  fi
 fi
 
 if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_SESSION_PCT" ]] && [[ "$AUTH_SESSION_PCT" =~ ^[0-9]+$ ]]; then
