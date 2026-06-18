@@ -96,14 +96,21 @@ if [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
         } | [.ok, .plan, .sess_pct, .sess_rst, .wk_all, .wk_son, .wk_rst, .mo_all, .mo_rst, .add_used, .add_cap, .fetched, .err] | @tsv
       ' < "$CLAUDE_AUTH_CACHE" 2>/dev/null) || AUTH_TSV=""
       if [[ -n "$AUTH_TSV" ]]; then
-        OLD_IFS=$IFS
-        IFS=$'\t' read -r \
-          AUTH_OK_RAW AUTH_PLAN AUTH_SESSION_PCT AUTH_RESET_SESSION \
-          AUTH_WEEKLY_ALL_PCT AUTH_WEEKLY_SONNET_PCT AUTH_RESET_WEEKLY \
-          AUTH_MONTHLY_ALL_PCT AUTH_RESET_MONTHLY \
-          AUTH_ADD_USED AUTH_ADD_CAP AUTH_FETCHED_AT AUTH_LOAD_ERROR \
-          <<<"$AUTH_TSV"
-        IFS=$OLD_IFS
+        AUTH_FIELDS=()
+        while IFS= read -r f; do AUTH_FIELDS+=("$f"); done < <(printf '%s\n' "$AUTH_TSV" | awk -F'\t' '{ for (i=1; i<=13; i++) print (i<=NF ? $i : "") }')
+        AUTH_OK_RAW="${AUTH_FIELDS[0]:-}"
+        AUTH_PLAN="${AUTH_FIELDS[1]:-}"
+        AUTH_SESSION_PCT="${AUTH_FIELDS[2]:-}"
+        AUTH_RESET_SESSION="${AUTH_FIELDS[3]:-}"
+        AUTH_WEEKLY_ALL_PCT="${AUTH_FIELDS[4]:-}"
+        AUTH_WEEKLY_SONNET_PCT="${AUTH_FIELDS[5]:-}"
+        AUTH_RESET_WEEKLY="${AUTH_FIELDS[6]:-}"
+        AUTH_MONTHLY_ALL_PCT="${AUTH_FIELDS[7]:-}"
+        AUTH_RESET_MONTHLY="${AUTH_FIELDS[8]:-}"
+        AUTH_ADD_USED="${AUTH_FIELDS[9]:-}"
+        AUTH_ADD_CAP="${AUTH_FIELDS[10]:-}"
+        AUTH_FETCHED_AT="${AUTH_FIELDS[11]:-}"
+        AUTH_LOAD_ERROR="${AUTH_FIELDS[12]:-}"
         if [[ "$AUTH_OK_RAW" == "true" ]]; then
           AUTH_OK="1"
           AUTH_LOAD_ERROR=""
@@ -371,109 +378,36 @@ fi
 echo "CC 5h:${PCT_5H}% W:${W_DISP} | color=$MENUBAR_COLOR length=24"
 echo "---"
 echo "Plan: ${DISPLAY_PLAN} | color=#888888"
-echo "5h rolling (all): ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
-for fam in opus sonnet haiku; do
-  case "$fam" in
-    opus) N=$FAM5_OPUS ;;
-    sonnet) N=$FAM5_SONNET ;;
-    haiku) N=$FAM5_HAIKU ;;
-  esac
-  PCT=$(pct_of "$N" "$CAP_5H")
-  COL=$(color_for "$PCT")
-  DISP=$(echo "$fam" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
-  echo "   ${DISP}: ${N} msg (${PCT}% of ${CAP_5H}) | color=$COL"
-done
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_SESSION" ]]; then
-  echo "   resets: ${AUTH_RESET_SESSION} (server) | color=#888888"
+is_real_reset() {
+  local s="$1"
+  [[ -z "$s" ]] && return 1
+  [[ "$s" == *"% 使用済み" ]] && return 1
+  [[ "$s" =~ ^[0-9]{4}- ]] && return 1
+  [[ "$s" =~ ^[0-9]+\.[0-9] ]] && return 1
+  [[ "$s" =~ [dDhH時分]$ ]] && return 1
+  [[ "$s" =~ ^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ]] && return 1
+  return 1
+}
+
+if [[ "$AUTH_OK" == "1" ]] && [[ "$PCT_7D_DISP" =~ ^[0-9]+$ ]]; then
+  echo "Weekly: ${PCT_7D_DISP}%* (server) | color=$W_COLOR"
+  if is_real_reset "$AUTH_RESET_WEEKLY"; then
+    echo "   resets in ${AUTH_RESET_WEEKLY} | color=#888888"
+  fi
 else
-  echo "   resets: see claude.ai/settings/usage (server) | color=#888888"
+  echo "Weekly: ${PCT_7D}% (local) | color=$W_COLOR"
 fi
-echo "Weekly (all models): ${C7} msg / ${CAP_7D} cap (${PCT_7D_DISP}%) | color=$W_COLOR"
-for fam in opus sonnet; do
-  case "$fam" in
-    opus) N=$FAM7_OPUS ;;
-    sonnet) N=$FAM7_SONNET ;;
-  esac
-  PCT=$(pct_of "$N" "$CAP_7D")
-  COL=$(color_for "$PCT")
-  DISP=$(echo "$fam" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
-  echo "   ${DISP}: ${N} msg (${PCT}% of ${CAP_7D}) | color=$COL"
-done
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_WEEKLY_SONNET_PCT" ]] && [[ "$AUTH_WEEKLY_SONNET_PCT" =~ ^[0-9]+$ ]]; then
-  WSK_COLOR=$(color_for "$AUTH_WEEKLY_SONNET_PCT")
-  echo "   Sonnet only: ${AUTH_WEEKLY_SONNET_PCT}%* (server) | color=$WSK_COLOR"
-fi
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_WEEKLY" ]]; then
-  echo "   resets: ${AUTH_RESET_WEEKLY} (server) | color=#888888"
+if [[ "$AUTH_OK" == "1" ]] && [[ "$AUTH_SESSION_PCT" =~ ^[0-9]+$ ]]; then
+  echo "Session: ${AUTH_SESSION_PCT}%* (server) | color=$(color_for "$AUTH_SESSION_PCT")"
+  if is_real_reset "$AUTH_RESET_SESSION"; then
+    echo "   resets in ${AUTH_RESET_SESSION} | color=#888888"
+  fi
 else
-  echo "   resets: see claude.ai (server) | color=#888888"
-fi
-# Claude console has no monthly cap; remove the entire monthly section
-# (kept FAM30_OPUS variable for backward compat, but never display it)
-if false; then
-  if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_MONTHLY_ALL_PCT" ]] && [[ "$AUTH_MONTHLY_ALL_PCT" =~ ^[0-9]+$ ]]; then
-    MO_COLOR=$(color_for "$AUTH_MONTHLY_ALL_PCT")
-    echo "Monthly (all): server ${AUTH_MONTHLY_ALL_PCT}%* (local ${C30}/${CAP_30D} = ${PCT_30D}%) | color=$MO_COLOR"
+  if (( ACTIVE_MSG > 0 )); then
+    echo "Session: ~${ACTIVE_MSG} msgs (approx) | color=#888888"
   else
-    echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
-  fi
-  PCT=$(pct_of "$FAM30_OPUS" "$CAP_30D")
-  COL=$(color_for "$PCT")
-  echo "   Opus: ${FAM30_OPUS} msg (${PCT}% of ${CAP_30D}) | color=$COL"
-  if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_RESET_MONTHLY" ]]; then
-    echo "   resets: ${AUTH_RESET_MONTHLY} (server) | color=#888888"
-  else
-    echo "   resets: see claude.ai (server) | color=#888888"
+    echo "Session: no recent activity | color=#888888"
   fi
 fi
-
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_SESSION_PCT" ]] && [[ "$AUTH_SESSION_PCT" =~ ^[0-9]+$ ]]; then
-  SESS_COLOR=$(color_for "$AUTH_SESSION_PCT")
-  echo "Current session: ${AUTH_SESSION_PCT}%* (server) | color=$SESS_COLOR"
-  if [[ -n "$AUTH_RESET_SESSION" ]]; then
-    echo "   resets in: ${AUTH_RESET_SESSION} | color=#888888"
-  fi
-elif (( ACTIVE_MSG > 0 )); then
-  echo "Current session: ~${ACTIVE_MSG} msgs (approx, last 2h) | color=#888888"
-else
-  echo "Current session: (no recent activity) | color=#888888"
-fi
-
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_ADD_USED" ]] && [[ -n "$AUTH_ADD_CAP" ]] \
-   && [[ "$AUTH_ADD_USED" =~ ^[0-9.]+$ ]] && [[ "$AUTH_ADD_CAP" =~ ^[0-9.]+$ ]]; then
-  echo "Additional usage: \$${AUTH_ADD_USED} / \$${AUTH_ADD_CAP} (server) | color=#ff8800"
-else
-  echo "Additional usage: not derivable locally, see claude.ai/settings/usage | color=#888888"
-fi
-
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_PLAN" ]] && [[ -n "$PLAN_LABEL" ]] \
-   && [[ "$DISPLAY_PLAN" != "$PLAN_LABEL" ]] \
-   && [[ "$AUTH_PLAN" != "max5x" || "$PLAN_LABEL" != "Max (5x)" ]] \
-   && [[ "$AUTH_PLAN" != "max20x" || "$PLAN_LABEL" != "Max (20x)" ]]; then
-  echo "WARNING: server plan ($AUTH_PLAN) differs from env ($PLAN_LABEL) | color=#ffaa00"
-fi
-
-if [[ "$WARN_FAM" == "1" ]]; then
-  echo "WARNING: family sum mismatch (5h/7d/30d) | color=#ffaa00"
-fi
-
 echo "Last refresh: $NOW_HMS | color=#888888"
-if [[ "$AUTH_OK" == "1" ]] && [[ -n "$AUTH_FETCHED_AT" ]]; then
-  echo "Auth fetched: $AUTH_FETCHED_AT | color=#888888"
-elif [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
-  case "$AUTH_LOAD_ERROR" in
-    cache_missing) echo "Auth data not available (Chrome not running?) | color=#ffaa00" ;;
-    cache_stale)   echo "Auth data stale (>${CLAUDE_AUTH_MAX_AGE}s), refresh | color=#ffaa00" ;;
-    not_logged_in) echo "Auth: not logged in to claude.ai (server returned /logout) | color=#ffaa00" ;;
-    chrome_launch_failed) echo "Auth: Chrome failed to launch | color=#ffaa00" ;;
-    no_tab_found) echo "Auth: could not open claude.ai tab | color=#ffaa00" ;;
-    page_load_timeout) echo "Auth: claude.ai page load timeout | color=#ffaa00" ;;
-    extract_regex_no_match) echo "Auth: regex stale, page text did not match | color=#ffaa00" ;;
-    extract_failed) echo "Auth: scraper crashed, see logs | color=#ffaa00" ;;
-    ws_error) echo "Auth: WebSocket error to Chrome | color=#ffaa00" ;;
-    jq_failed) echo "Auth: cache JSON unreadable | color=#ffaa00" ;;
-    no_jq) echo "Auth: jq not installed | color=#ffaa00" ;;
-    *) [[ -n "$AUTH_LOAD_ERROR" ]] && echo "Auth: $AUTH_LOAD_ERROR | color=#ffaa00" ;;
-  esac
-fi
 echo "Refresh | refresh=true"
