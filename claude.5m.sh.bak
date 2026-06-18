@@ -386,7 +386,7 @@ else
 fi
 echo "CC 5h:${PCT_5H}% W:${W_DISP} | color=$MENUBAR_COLOR length=24"
 echo "---"
-echo "Plan: ${DISPLAY_PLAN} | color=#888888"
+echo "Plan: ${DISPLAY_PLAN} | color=#bbbbbb"
 is_real_reset() {
   local s="$1"
   [[ -z "$s" ]] && return 1
@@ -414,9 +414,9 @@ except Exception:
 if [[ "$AUTH_OK" == "1" ]] && [[ "$PCT_7D_DISP" =~ ^[0-9]+$ ]]; then
   echo "Weekly: ${PCT_7D_DISP}%* (server) | color=$W_COLOR"
   if WD=$(fmt_date "$AUTH_RESET_WEEKLY_DATE"); then
-    echo "   resets $WD | color=#888888"
+    echo "  ↳ resets $WD JST | color=#66aaff"
   elif is_real_reset "$AUTH_RESET_WEEKLY"; then
-    echo "   resets in ${AUTH_RESET_WEEKLY} | color=#888888"
+    echo "  ↳ resets in ${AUTH_RESET_WEEKLY} | color=#66aaff"
   fi
 else
   echo "Weekly: ${PCT_7D}% (local) | color=$W_COLOR"
@@ -424,16 +424,17 @@ fi
 if [[ "$AUTH_OK" == "1" ]] && [[ "$AUTH_SESSION_PCT" =~ ^[0-9]+$ ]]; then
   echo "Session: ${AUTH_SESSION_PCT}%* (server) | color=$(color_for "$AUTH_SESSION_PCT")"
   if SD=$(fmt_date "$AUTH_RESET_SESSION_DATE"); then
-    echo "   resets $SD | color=#888888"
+    echo "  ↳ resets $SD JST | color=#66aaff"
   elif is_real_reset "$AUTH_RESET_SESSION"; then
-    echo "   resets in ${AUTH_RESET_SESSION} | color=#888888"
+    echo "  ↳ resets in ${AUTH_RESET_SESSION} | color=#66aaff"
   fi
 else
   if (( ACTIVE_MSG > 0 )); then
-    echo "Session: ~${ACTIVE_MSG} msgs (approx) | color=#888888"
+    echo "Session: ~${ACTIVE_MSG} msgs (approx) | color=#bbbbbb"
   else
-    echo "Session: no recent activity | color=#888888"
+    echo "Session: no recent activity | color=#bbbbbb"
   fi
 fi
-echo "Last refresh: $NOW_HMS | color=#888888"
+echo "---"
+echo "Last refresh: $NOW_HMS | color=#66aaff"
 echo "Refresh | refresh=true"
