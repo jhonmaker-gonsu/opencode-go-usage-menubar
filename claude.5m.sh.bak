@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # <xbar.title>Claude Code Usage</xbar.title>
-# <xbar.version>1.0.1</xbar.version>
+# <xbar.version>2.0.0</xbar.version>
 # <xbar.author>gon</xbar.author>
-# <xbar.desc>Claude Code message quota (5h + 7d + 30d) from local JSONL</xbar.desc>
+# <xbar.desc>Claude Code usage: 5h/weekly/monthly + per-model + active session (local JSONL)</xbar.desc>
 # <xbar.dependencies>jq,numfmt</xbar.dependencies>
 
 set -euo pipefail
@@ -13,19 +13,24 @@ CLAUDE_PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 CLAUDE_PLAN="${CLAUDE_PLAN:-max5x}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-}"
 CAP_5H_OVERRIDE="${CAP_5H_OVERRIDE:-}"
+CAP_7D_OVERRIDE="${CAP_7D_OVERRIDE:-}"
+CAP_30D_OVERRIDE="${CAP_30D_OVERRIDE:-}"
 CLAUDE_PROJECT="${CLAUDE_PROJECT:-}"
 CLAUDE_MTIME_DAYS="${CLAUDE_MTIME_DAYS:-365}"
+CLAUDE_USE_AUTH="${CLAUDE_USE_AUTH:-}"
+CLAUDE_FAMILIES_DEFAULT="${CLAUDE_FAMILIES_DEFAULT:-opus,sonnet,haiku,other}"
 
 case "$CLAUDE_PLAN" in
-  pro)    CAP_5H=45   CAP_7D=1800  CAP_30D=7200  ;;
-  max5x)  CAP_5H=225  CAP_7D=9000  CAP_30D=36000 ;;
-  max20x) CAP_5H=900  CAP_7D=36000 CAP_30D=144000;;
-  *)      CAP_5H=45   CAP_7D=1800  CAP_30D=7200  ;;
+  pro)    CAP_5H=45   CAP_7D=1800  CAP_30D=7200  PLAN_LABEL="Pro" ;;
+  max5x)  CAP_5H=225  CAP_7D=9000  CAP_30D=36000 PLAN_LABEL="Max (5x)" ;;
+  max20x) CAP_5H=900  CAP_7D=36000 CAP_30D=144000 PLAN_LABEL="Max (20x)" ;;
+  *)      CAP_5H=45   CAP_7D=1800  CAP_30D=7200  PLAN_LABEL="Pro" ;;
 esac
 CAP_5H="${CAP_5H_OVERRIDE:-$CAP_5H}"
 CAP_7D="${CAP_7D_OVERRIDE:-$CAP_7D}"
 CAP_30D="${CAP_30D_OVERRIDE:-$CAP_30D}"
 
+NOW_S=$(date +%s)
 NOW_HMS=$(date +%H:%M:%S)
 C5_CUTOFF=$(TZ=UTC date -u -v-5H  +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || TZ=UTC date -u -d '5 hours ago'  +%Y-%m-%dT%H:%M:%SZ)
 C7_CUTOFF=$(TZ=UTC date -u -v-7d  +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || TZ=UTC date -u -d '7 days ago'  +%Y-%m-%dT%H:%M:%SZ)
@@ -43,6 +48,8 @@ color_for() {
   else echo "#33dd33"
   fi
 }
+
+DISPLAY_PLAN="$PLAN_LABEL"
 
 if [[ ! -d "$CLAUDE_PROJECTS" ]]; then
   echo "CC: no data"
@@ -134,13 +141,37 @@ SUMMARY=$(echo "$TSV" | awk -F'\t' '
     ccs[w] += $5 + 0
     crs[w] += $6 + 0
     n_rows++
+    lmodel = tolower($7)
+    if (lmodel ~ /opus/) fam = "opus"
+    else if (lmodel ~ /sonnet/) fam = "sonnet"
+    else if (lmodel ~ /haiku/) fam = "haiku"
+    else fam = "other"
+    fcnt[fam, w]++
+    if (w == 5) {
+      ftin[fam]  += $3 + 0
+      ftout[fam] += $4 + 0
+      ftcc[fam]  += $5 + 0
+      ftcr[fam]  += $6 + 0
+    }
   }
   END {
-    printf "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", \
-      n_records+0, n_rows+0, counts[5]+0, counts[7]+0, counts[30]+0, \
-      is[5]+0, os[5]+0, ccs[5]+0, crs[5]+0, \
-      is[7]+0, os[7]+0, ccs[7]+0, crs[7]+0, \
+    printf "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t",
+      n_records+0, n_rows+0, counts[5]+0, counts[7]+0, counts[30]+0,
+      is[5]+0, os[5]+0, ccs[5]+0, crs[5]+0,
+      is[7]+0, os[7]+0, ccs[7]+0, crs[7]+0,
       is[30]+0, os[30]+0, ccs[30]+0, crs[30]+0
+    printf "%d\t%d\t%d\t%d\t",
+      fcnt["opus",5]+0, fcnt["sonnet",5]+0, fcnt["haiku",5]+0, fcnt["other",5]+0
+    printf "%d\t%d\t%d\t%d\t",
+      fcnt["opus",7]+0, fcnt["sonnet",7]+0, fcnt["haiku",7]+0, fcnt["other",7]+0
+    printf "%d\t%d\t%d\t%d\t",
+      fcnt["opus",30]+0, fcnt["sonnet",30]+0, fcnt["haiku",30]+0, fcnt["other",30]+0
+    printf "%d\t%d\t%d\t%d\t",
+      ftin["opus"]+0, ftout["opus"]+0, ftcc["opus"]+0, ftcr["opus"]+0
+    printf "%d\t%d\t%d\t%d\t",
+      ftin["sonnet"]+0, ftout["sonnet"]+0, ftcc["sonnet"]+0, ftcr["sonnet"]+0
+    printf "%d\t%d\t%d\t%d\n",
+      ftin["haiku"]+0, ftout["haiku"]+0, ftcc["haiku"]+0, ftcr["haiku"]+0
   }
 ')
 
@@ -170,13 +201,30 @@ if [[ -z "$SUMMARY" ]]; then
 fi
 
 OLD_IFS=$IFS
-IFS=$'\t' read -r N_RECORDS N_ROWS C5 C7 C30 T5_IN T5_OUT T5_CC T5_CR T7_IN T7_OUT T7_CC T7_CR T30_IN T30_OUT T30_CC T30_CR <<<"$SUMMARY"
+IFS=$'\t' read -r \
+  N_RECORDS N_ROWS C5 C7 C30 \
+  T5_IN T5_OUT T5_CC T5_CR \
+  T7_IN T7_OUT T7_CC T7_CR \
+  T30_IN T30_OUT T30_CC T30_CR \
+  FAM5_OPUS FAM5_SONNET FAM5_HAIKU FAM5_OTHER \
+  FAM7_OPUS FAM7_SONNET FAM7_HAIKU FAM7_OTHER \
+  FAM30_OPUS FAM30_SONNET FAM30_HAIKU FAM30_OTHER \
+  FAM5_OPUS_IN FAM5_OPUS_OUT FAM5_OPUS_CC FAM5_OPUS_CR \
+  FAM5_SONNET_IN FAM5_SONNET_OUT FAM5_SONNET_CC FAM5_SONNET_CR \
+  FAM5_HAIKU_IN FAM5_HAIKU_OUT FAM5_HAIKU_CC FAM5_HAIKU_CR \
+  <<<"$SUMMARY"
 IFS=$OLD_IFS
 
 for v in "$N_RECORDS" "$N_ROWS" "$C5" "$C7" "$C30" \
          "$T5_IN" "$T5_OUT" "$T5_CC" "$T5_CR" \
          "$T7_IN" "$T7_OUT" "$T7_CC" "$T7_CR" \
-         "$T30_IN" "$T30_OUT" "$T30_CC" "$T30_CR"; do
+         "$T30_IN" "$T30_OUT" "$T30_CC" "$T30_CR" \
+         "$FAM5_OPUS" "$FAM5_SONNET" "$FAM5_HAIKU" "$FAM5_OTHER" \
+         "$FAM7_OPUS" "$FAM7_SONNET" "$FAM7_HAIKU" "$FAM7_OTHER" \
+         "$FAM30_OPUS" "$FAM30_SONNET" "$FAM30_HAIKU" "$FAM30_OTHER" \
+         "$FAM5_OPUS_IN" "$FAM5_OPUS_OUT" "$FAM5_OPUS_CC" "$FAM5_OPUS_CR" \
+         "$FAM5_SONNET_IN" "$FAM5_SONNET_OUT" "$FAM5_SONNET_CC" "$FAM5_SONNET_CR" \
+         "$FAM5_HAIKU_IN" "$FAM5_HAIKU_OUT" "$FAM5_HAIKU_CC" "$FAM5_HAIKU_CR"; do
   if ! [[ "$v" =~ ^[0-9]+$ ]]; then
     echo "CC ?"
     echo "---"
@@ -197,6 +245,11 @@ if [[ ${#JSONL_FILES[@]} -gt 0 ]] && [[ "$N_RECORDS" -eq 0 ]]; then
   exit 0
 fi
 
+WARN_FAM=$(awk -v a="$FAM5_OPUS" -v b="$FAM5_SONNET" -v c="$FAM5_HAIKU" -v d="$FAM5_OTHER" -v e="$C5" \
+                -v f="$FAM7_OPUS" -v g="$FAM7_SONNET" -v h="$FAM7_HAIKU" -v i="$FAM7_OTHER" -v j="$C7" \
+                -v k="$FAM30_OPUS" -v l="$FAM30_SONNET" -v m="$FAM30_HAIKU" -v n="$FAM30_OTHER" -v o="$C30" \
+           'BEGIN{ w=0; if(a+b+c+d != e+0) w=1; if(f+g+h+i != j+0) w=1; if(k+l+m+n != o+0) w=1; print w }')
+
 PCT_5H=$(pct_of "$C5" "$CAP_5H")
 C5_COLOR=$(color_for "$PCT_5H")
 PCT_7D=$(pct_of "$C7" "$CAP_7D")
@@ -204,41 +257,69 @@ PCT_30D=$(pct_of "$C30" "$CAP_30D")
 C7_COLOR=$(color_for "$PCT_7D")
 C30_COLOR=$(color_for "$PCT_30D")
 
-if [[ -n "$CLAUDE_MODEL" ]]; then
-  PCT_M5=$(pct_of "$MODEL_5H" "$CAP_5H")
-  PCT_M7=$(pct_of "$MODEL_7D" "$CAP_7D")
-  PCT_M30=$(pct_of "$MODEL_30D" "$CAP_30D")
-  C5_COLOR=$(color_for "$PCT_M5")
-  echo "CC ${MODEL_5H}/${CAP_5H} ${PCT_M5}% | color=$C5_COLOR"
-else
-  echo "CC ${C5}/${CAP_5H} ${PCT_5H}% | color=$C5_COLOR"
+ACTIVE_FILE=""
+ACTIVE_MTIME=0
+ACTIVE_MSG=0
+for f in "${JSONL_FILES[@]}"; do
+  MT=$(stat -f %m "$f" 2>/dev/null || echo 0)
+  if (( MT > ACTIVE_MTIME )); then
+    ACTIVE_MTIME=$MT
+    ACTIVE_FILE=$f
+  fi
+done
+if [[ -n "$ACTIVE_FILE" ]]; then
+  ACTIVE_AGE=$(( NOW_S - ACTIVE_MTIME ))
+  if (( ACTIVE_AGE < 7200 )); then
+    TMP_CNT=$("$JQ" -c 'select(.type == "assistant")' "$ACTIVE_FILE" 2>/dev/null | wc -l | tr -d ' ' || true)
+    ACTIVE_MSG=${TMP_CNT:-0}
+  fi
 fi
+
+MAX_PCT=$(awk -v a="$PCT_5H" -v b="$PCT_7D" -v c="$PCT_30D" 'BEGIN{ m=a; if(b>m)m=b; if(c>m)m=c; print m }')
+MENUBAR_COLOR=$(color_for "$MAX_PCT")
+echo "CC 5h:${PCT_5H}% W:${PCT_7D}% M:${PCT_30D}% | color=$MENUBAR_COLOR length=24"
 echo "---"
-echo "Plan: ${CLAUDE_PLAN} (5h cap: ${CAP_5H}) | color=#888888"
-echo "5h rolling:    ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
-echo "    resets: server-side, no client signal | color=#888888"
-if [[ -n "$CLAUDE_MODEL" ]]; then
-  C7_M_COLOR=$(color_for "$PCT_M7")
-  C30_M_COLOR=$(color_for "$PCT_M30")
-  echo "5h ${CLAUDE_MODEL}: ${MODEL_5H} / ${CAP_5H} (${PCT_M5}%) | color=$C5_COLOR"
-  echo "Weekly ${CLAUDE_MODEL}: ${MODEL_7D} / ${CAP_7D} (${PCT_M7}%) | color=$C7_M_COLOR"
-  echo "Monthly ${CLAUDE_MODEL}: ${MODEL_30D} / ${CAP_30D} (${PCT_M30}%) | color=$C30_M_COLOR"
-fi
-echo "Weekly (all): ${C7} msg / ${CAP_7D} cap (${PCT_7D}%) | color=$C7_COLOR"
+echo "Plan: ${DISPLAY_PLAN} | color=#888888"
+echo "5h rolling (all): ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
+for fam in opus sonnet haiku; do
+  case "$fam" in
+    opus) N=$FAM5_OPUS ;;
+    sonnet) N=$FAM5_SONNET ;;
+    haiku) N=$FAM5_HAIKU ;;
+  esac
+  PCT=$(pct_of "$N" "$CAP_5H")
+  COL=$(color_for "$PCT")
+  DISP=$(echo "$fam" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+  echo "   ${DISP}: ${N} msg (${PCT}% of ${CAP_5H}) | color=$COL"
+done
+echo "   resets: see claude.ai/settings/usage (server) | color=#888888"
+echo "Weekly (all models): ${C7} msg / ${CAP_7D} cap (${PCT_7D}%) | color=$C7_COLOR"
+for fam in opus sonnet; do
+  case "$fam" in
+    opus) N=$FAM7_OPUS ;;
+    sonnet) N=$FAM7_SONNET ;;
+  esac
+  PCT=$(pct_of "$N" "$CAP_7D")
+  COL=$(color_for "$PCT")
+  DISP=$(echo "$fam" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+  echo "   ${DISP}: ${N} msg (${PCT}% of ${CAP_7D}) | color=$COL"
+done
+echo "   resets: see claude.ai (server) | color=#888888"
 echo "Monthly (all): ${C30} msg / ${CAP_30D} cap (${PCT_30D}%) | color=$C30_COLOR"
-echo "(caps: pro 45/1800/7200, max5x 225/9000/36000, max20x 900/36000/144000) | color=#888888"
-if [[ -z "$CLAUDE_MODEL" ]]; then
-  echo "Set CLAUDE_MODEL=claude-opus-* for per-model breakdown (glob) | color=#888888"
+PCT=$(pct_of "$FAM30_OPUS" "$CAP_30D")
+COL=$(color_for "$PCT")
+echo "   Opus: ${FAM30_OPUS} msg (${PCT}% of ${CAP_30D}) | color=$COL"
+echo "   resets: see claude.ai (server) | color=#888888"
+
+if [[ "$ACTIVE_MSG" -gt 0 ]]; then
+  echo "Current session: ~${ACTIVE_MSG} msgs (approx, last 2h) | color=#888888"
+else
+  echo "Current session: (no recent activity) | color=#888888"
 fi
-echo "---"
-T5_TOTAL=$(awk -v a="$T5_IN" -v b="$T5_OUT" -v c="$T5_CC" -v d="$T5_CR" 'BEGIN{print a+b+c+d}')
-echo "Tokens 5h in:    $(echo "$T5_IN" | "$NUMFMT" --to=si --format="%.1f") | color=#888888"
-echo "Tokens 5h out:   $(echo "$T5_OUT" | "$NUMFMT" --to=si --format="%.1f") | color=#888888"
-echo "Tokens 5h cache: $(echo "$T5_CC" | "$NUMFMT" --to=si --format="%.1f") created + $(echo "$T5_CR" | "$NUMFMT" --to=si --format="%.1f") read | color=#888888"
-echo "Tokens 5h total: $(echo "$T5_TOTAL" | "$NUMFMT" --to=si --format="%.1f") | color=#33dd33"
-echo "---"
-echo "Set CLAUDE_PROJECT to a project slug from ls ~/.claude/projects/ | color=#888888"
-echo "(e.g. -Users-gon-Desktop-foo; leading dash is optional) | color=#888888"
-echo "---"
+
+if [[ "$WARN_FAM" == "1" ]]; then
+  echo "WARNING: family sum mismatch (5h/7d/30d) | color=#ffaa00"
+fi
+
 echo "Last refresh: $NOW_HMS | color=#888888"
 echo "Refresh | refresh=true"

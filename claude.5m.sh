@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # <xbar.title>Claude Code Usage</xbar.title>
-# <xbar.version>1.1.0</xbar.version>
+# <xbar.version>1.2.0</xbar.version>
 # <xbar.author>gon</xbar.author>
 # <xbar.desc>Claude Code message quota (5h + 7d + 30d) from local JSONL</xbar.desc>
 # <xbar.dependencies>jq,numfmt</xbar.dependencies>
@@ -32,7 +32,15 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   exit 0
 fi
 
-( CLAUDE_PLAN="$PLAN" CLAUDE_PROJECTS="$PROJECTS" "$SCRIPT" > "${CACHE}.new" 2>/dev/null
+( CLAUDE_PLAN="$PLAN" CLAUDE_PROJECTS="$PROJECTS" \
+    CLAUDE_USE_AUTH="${CLAUDE_USE_AUTH:-}" \
+    CLAUDE_FAMILIES_DEFAULT="${CLAUDE_FAMILIES_DEFAULT:-opus,sonnet,haiku,other}" \
+    CLAUDE_MODEL="${CLAUDE_MODEL:-}" \
+    CLAUDE_PROJECT="${CLAUDE_PROJECT:-}" \
+    CLAUDE_MTIME_DAYS="${CLAUDE_MTIME_DAYS:-365}" \
+    JQ="${JQ:-/opt/homebrew/bin/jq}" \
+    NUMFMT="${NUMFMT:-/opt/homebrew/bin/numfmt}" \
+    "$SCRIPT" > "${CACHE}.new" 2>/dev/null
   mv "${CACHE}.new" "$CACHE"
   rmdir "$LOCK" 2>/dev/null
 ) &
