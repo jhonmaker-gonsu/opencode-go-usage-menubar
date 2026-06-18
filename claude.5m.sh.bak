@@ -57,11 +57,14 @@ AUTH_OK="0"
 AUTH_PLAN=""
 AUTH_SESSION_PCT=""
 AUTH_RESET_SESSION=""
+AUTH_RESET_SESSION_DATE=""
 AUTH_WEEKLY_ALL_PCT=""
 AUTH_WEEKLY_SONNET_PCT=""
 AUTH_RESET_WEEKLY=""
+AUTH_RESET_WEEKLY_DATE=""
 AUTH_MONTHLY_ALL_PCT=""
 AUTH_RESET_MONTHLY=""
+AUTH_RESET_MONTHLY_DATE=""
 AUTH_ADD_USED=""
 AUTH_ADD_CAP=""
 AUTH_FETCHED_AT=""
@@ -84,33 +87,39 @@ if [[ "$CLAUDE_USE_AUTH" == "1" ]]; then
           plan:      s(.plan_tier),
           sess_pct:  s(.session_pct),
           sess_rst:  s(.session_reset),
+          sess_date: s(.session_reset_date),
           wk_all:    s(.weekly_all_pct),
           wk_son:    s(.weekly_sonnet_pct),
           wk_rst:    s(.weekly_reset),
+          wk_date:   s(.weekly_reset_date),
           mo_all:    s(.monthly_all_pct),
           mo_rst:    s(.monthly_reset),
+          mo_date:   s(.monthly_reset_date),
           add_used:  s(.additional_used),
           add_cap:   s(.additional_cap),
           fetched:   s(.fetched_at),
           err:       s(.error)
-        } | [.ok, .plan, .sess_pct, .sess_rst, .wk_all, .wk_son, .wk_rst, .mo_all, .mo_rst, .add_used, .add_cap, .fetched, .err] | @tsv
+        } | [.ok, .plan, .sess_pct, .sess_rst, .sess_date, .wk_all, .wk_son, .wk_rst, .wk_date, .mo_all, .mo_rst, .mo_date, .add_used, .add_cap, .fetched, .err] | @tsv
       ' < "$CLAUDE_AUTH_CACHE" 2>/dev/null) || AUTH_TSV=""
       if [[ -n "$AUTH_TSV" ]]; then
         AUTH_FIELDS=()
-        while IFS= read -r f; do AUTH_FIELDS+=("$f"); done < <(printf '%s\n' "$AUTH_TSV" | awk -F'\t' '{ for (i=1; i<=13; i++) print (i<=NF ? $i : "") }')
+        while IFS= read -r f; do AUTH_FIELDS+=("$f"); done < <(printf '%s\n' "$AUTH_TSV" | awk -F'\t' '{ for (i=1; i<=16; i++) print (i<=NF ? $i : "") }')
         AUTH_OK_RAW="${AUTH_FIELDS[0]:-}"
         AUTH_PLAN="${AUTH_FIELDS[1]:-}"
         AUTH_SESSION_PCT="${AUTH_FIELDS[2]:-}"
         AUTH_RESET_SESSION="${AUTH_FIELDS[3]:-}"
-        AUTH_WEEKLY_ALL_PCT="${AUTH_FIELDS[4]:-}"
-        AUTH_WEEKLY_SONNET_PCT="${AUTH_FIELDS[5]:-}"
-        AUTH_RESET_WEEKLY="${AUTH_FIELDS[6]:-}"
-        AUTH_MONTHLY_ALL_PCT="${AUTH_FIELDS[7]:-}"
-        AUTH_RESET_MONTHLY="${AUTH_FIELDS[8]:-}"
-        AUTH_ADD_USED="${AUTH_FIELDS[9]:-}"
-        AUTH_ADD_CAP="${AUTH_FIELDS[10]:-}"
-        AUTH_FETCHED_AT="${AUTH_FIELDS[11]:-}"
-        AUTH_LOAD_ERROR="${AUTH_FIELDS[12]:-}"
+        AUTH_RESET_SESSION_DATE="${AUTH_FIELDS[4]:-}"
+        AUTH_WEEKLY_ALL_PCT="${AUTH_FIELDS[5]:-}"
+        AUTH_WEEKLY_SONNET_PCT="${AUTH_FIELDS[6]:-}"
+        AUTH_RESET_WEEKLY="${AUTH_FIELDS[7]:-}"
+        AUTH_RESET_WEEKLY_DATE="${AUTH_FIELDS[8]:-}"
+        AUTH_MONTHLY_ALL_PCT="${AUTH_FIELDS[9]:-}"
+        AUTH_RESET_MONTHLY="${AUTH_FIELDS[10]:-}"
+        AUTH_RESET_MONTHLY_DATE="${AUTH_FIELDS[11]:-}"
+        AUTH_ADD_USED="${AUTH_FIELDS[12]:-}"
+        AUTH_ADD_CAP="${AUTH_FIELDS[13]:-}"
+        AUTH_FETCHED_AT="${AUTH_FIELDS[14]:-}"
+        AUTH_LOAD_ERROR="${AUTH_FIELDS[15]:-}"
         if [[ "$AUTH_OK_RAW" == "true" ]]; then
           AUTH_OK="1"
           AUTH_LOAD_ERROR=""
@@ -387,9 +396,26 @@ is_real_reset() {
   return 0
 }
 
+fmt_date() {
+  local iso="$1"
+  [[ -z "$iso" || "$iso" == "null" ]] && return 1
+  python3 -c "
+import sys, datetime
+iso = '$iso'.rstrip('Z')
+try:
+    dt = datetime.datetime.fromisoformat(iso)
+    dt = dt.replace(tzinfo=datetime.timezone.utc).astimezone(datetime.timezone(datetime.timedelta(hours=9)))
+    print(dt.strftime('%m/%d %H:%M'))
+except Exception:
+    sys.exit(1)
+" 2>/dev/null
+}
+
 if [[ "$AUTH_OK" == "1" ]] && [[ "$PCT_7D_DISP" =~ ^[0-9]+$ ]]; then
   echo "Weekly: ${PCT_7D_DISP}%* (server) | color=$W_COLOR"
-  if is_real_reset "$AUTH_RESET_WEEKLY"; then
+  if WD=$(fmt_date "$AUTH_RESET_WEEKLY_DATE"); then
+    echo "   resets $WD | color=#888888"
+  elif is_real_reset "$AUTH_RESET_WEEKLY"; then
     echo "   resets in ${AUTH_RESET_WEEKLY} | color=#888888"
   fi
 else
@@ -397,7 +423,9 @@ else
 fi
 if [[ "$AUTH_OK" == "1" ]] && [[ "$AUTH_SESSION_PCT" =~ ^[0-9]+$ ]]; then
   echo "Session: ${AUTH_SESSION_PCT}%* (server) | color=$(color_for "$AUTH_SESSION_PCT")"
-  if is_real_reset "$AUTH_RESET_SESSION"; then
+  if SD=$(fmt_date "$AUTH_RESET_SESSION_DATE"); then
+    echo "   resets $SD | color=#888888"
+  elif is_real_reset "$AUTH_RESET_SESSION"; then
     echo "   resets in ${AUTH_RESET_SESSION} | color=#888888"
   fi
 else

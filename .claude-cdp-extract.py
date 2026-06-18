@@ -56,6 +56,49 @@ EXTRACT_JS = r"""
     }
     return null;
   }
+  function toDateStr(raw) {
+    if (!raw) return null;
+    var now = new Date();
+    var m;
+    m = raw.match(/^(\d+)時間(\d+)分$/);
+    if (m) {
+      var d = new Date(now.getTime() + (parseInt(m[1],10)*3600 + parseInt(m[2],10)*60)*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+)分$/);
+    if (m) {
+      var d = new Date(now.getTime() + parseInt(m[1],10)*60*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+)時間$/);
+    if (m) {
+      var d = new Date(now.getTime() + parseInt(m[1],10)*3600*1000);
+      return d.toISOString();
+    }
+    m = raw.match(/^(\d+):(\d+)\s*\(([日月火水木金土])\)$/);
+    if (m) {
+      var hh = parseInt(m[1],10), mm = parseInt(m[2],10);
+      var wdMap = {日:0,月:1,火:2,水:3,木:4,金:5,土:6};
+      var targetWd = wdMap[m[3]];
+      var d = new Date(now);
+      d.setHours(hh, mm, 0, 0);
+      var diff = (targetWd - d.getDay() + 7) % 7;
+      if (diff === 0 && d.getTime() <= now.getTime()) diff = 7;
+      d.setDate(d.getDate() + diff);
+      return d.toISOString();
+    }
+    m = raw.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d+)$/i);
+    if (m) {
+      var monMap = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      var mon = monMap[m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()];
+      var day = parseInt(m[2],10);
+      var yr = now.getFullYear();
+      var d = new Date(yr, mon, day, 0, 0, 0, 0);
+      if (d.getTime() < now.getTime()) d = new Date(yr+1, mon, day, 0, 0, 0, 0);
+      return d.toISOString();
+    }
+    return null;
+  }
   function moneyUsed(re) {
     var m = document.body.innerText.match(re);
     if (!m) return null;
@@ -84,11 +127,14 @@ EXTRACT_JS = r"""
     plan_tier: planTier,
     session_pct: pct("Current session") || pct("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3"),
     session_reset: resetFor("Current session") || resetFor("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3"),
+    session_reset_date: toDateStr(resetFor("Current session") || resetFor("\u73fe\u5728\u306e\u30bb\u30c3\u30b7\u30e7\u30f3")),
     weekly_all_pct: pct("All models") || pct("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb"),
     weekly_sonnet_pct: pct("Sonnet only") || pct("Sonnet\u306e\u307f"),
     weekly_reset: resetFor("All models") || resetFor("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb"),
+    weekly_reset_date: toDateStr(resetFor("All models") || resetFor("\u3059\u3079\u3066\u306e\u30e2\u30c7\u30eb")),
     monthly_all_pct: pct("Monthly") || pct("\u6708\u9593"),
     monthly_reset: resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593"),
+    monthly_reset_date: toDateStr(resetFor("Credits") || resetFor("\u5229\u7528\u30af\u30ec\u30b8\u30c3\u30c8") || resetFor("Monthly") || resetFor("\u6708\u9593")),
     additional_used: moneyUsed(/\$\s*([\d.,]+)\s*(?:used|\u4f7f\u7528\u6d3e|\/)/i),
     additional_cap: moneyCap(/\$\s*([\d.,]+)\s*(?:cap|limit|\u4e0a\u9650)/i),
     page_excerpt: text.substring(0, 600),
