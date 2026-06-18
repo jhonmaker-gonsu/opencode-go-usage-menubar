@@ -33,11 +33,11 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 
 if [[ "${CLAUDE_USE_AUTH:-1}" == "1" ]]; then
-  ( "$HOME/.claude-swiftbar-chrome/claude-cdp-scraper.sh" >/dev/null 2>&1 ) &
+  ( "$HOME/SwiftBar/.claude-cdp-scraper.sh" >/dev/null 2>&1 ) &
 fi
 
 ( CLAUDE_PLAN="$PLAN" CLAUDE_PROJECTS="$PROJECTS" \
-    CLAUDE_USE_AUTH="${CLAUDE_USE_AUTH:-}" \
+    CLAUDE_USE_AUTH="${CLAUDE_USE_AUTH:-1}" \
     CLAUDE_AUTH_CACHE="${CLAUDE_AUTH_CACHE:-${CACHE_DIR}/claude-usage-auth.json}" \
     CLAUDE_AUTH_MAX_AGE="${CLAUDE_AUTH_MAX_AGE:-240}" \
     CLAUDE_FAMILIES_DEFAULT="${CLAUDE_FAMILIES_DEFAULT:-opus,sonnet,haiku,other}" \
