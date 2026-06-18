@@ -179,6 +179,13 @@ fi
 PCT_5H=$(pct_of "$C5" "$CAP_5H")
 C5_COLOR=$(color_for "$PCT_5H")
 
+CAP_7D=$(( CAP_5H * 168 / 5 ))
+CAP_30D=$(( CAP_5H * 720 / 5 ))
+PCT_7D=$(pct_of "$C7" "$CAP_7D")
+PCT_30D=$(pct_of "$C30" "$CAP_30D")
+C7_COLOR=$(color_for "$PCT_7D")
+C30_COLOR=$(color_for "$PCT_30D")
+
 if [[ "$C5" -eq 0 ]]; then
   echo "CC 0 | color=#33dd33"
 else
@@ -188,8 +195,9 @@ echo "---"
 echo "Plan: ${CLAUDE_PLAN} (5h cap: ${CAP_5H}) | color=#888888"
 echo "5h rolling:    ${C5} msg / ${CAP_5H} cap (${PCT_5H}%) | color=$C5_COLOR"
 echo "    resets: server-side, no client signal | color=#888888"
-echo "Weekly:        ${C7} msg (informational) | color=#33dd33"
-echo "Monthly:       ${C30} msg (informational) | color=#33dd33"
+echo "Weekly:        ${C7} msg / ${CAP_7D} cap (${PCT_7D}%, extrapolated) | color=$C7_COLOR"
+echo "Monthly:       ${C30} msg / ${CAP_30D} cap (${PCT_30D}%, extrapolated) | color=$C30_COLOR"
+echo "(caps extrapolated from 5h rate; not published by Anthropic) | color=#888888"
 echo "---"
 T5_TOTAL=$(awk -v a="$T5_IN" -v b="$T5_OUT" -v c="$T5_CC" -v d="$T5_CR" 'BEGIN{print a+b+c+d}')
 echo "Tokens 5h in:    $(echo "$T5_IN" | "$NUMFMT" --to=si --format="%.1f") | color=#888888"
