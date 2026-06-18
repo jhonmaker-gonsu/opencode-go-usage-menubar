@@ -15,13 +15,13 @@ PROJECTS="${CLAUDE_PROJECTS:-$HOME/.claude/projects}"
 NOW=$(date +%s)
 MAX_AGE=240
 
-if [[ -f "$CACHE" ]] && [[ $(($NOW - $(stat -f %m "$CACHE" 2>/dev/null || echo 0))) -lt $MAX_AGE ]]; then
+if [[ -s "$CACHE" ]] && [[ $(($NOW - $(stat -f %m "$CACHE" 2>/dev/null || echo 0))) -lt $MAX_AGE ]]; then
   cat "$CACHE"
   exit 0
 fi
 
 if ! mkdir "$LOCK" 2>/dev/null; then
-  if [[ -f "$CACHE" ]]; then
+  if [[ -s "$CACHE" ]]; then
     cat "$CACHE"
   else
     echo "CC ... | color=#888888"
@@ -47,11 +47,15 @@ fi
     JQ="${JQ:-/opt/homebrew/bin/jq}" \
     NUMFMT="${NUMFMT:-/opt/homebrew/bin/numfmt}" \
     "$SCRIPT" > "${CACHE}.new" 2>/dev/null
-  mv "${CACHE}.new" "$CACHE"
+  if [[ -s "${CACHE}.new" ]]; then
+    mv "${CACHE}.new" "$CACHE"
+  else
+    rm -f "${CACHE}.new"
+  fi
   rmdir "$LOCK" 2>/dev/null
 ) &
 
-if [[ -f "$CACHE" ]]; then
+if [[ -s "$CACHE" ]]; then
   cat "$CACHE"
 else
   echo "CC ... | color=#888888"
